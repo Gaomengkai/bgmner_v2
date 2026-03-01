@@ -194,31 +194,48 @@ bgmner-export-onnx `
   --output-path runs\bgm_bert_base\onnx\model.onnx
 ```
 
+可选：导出后立即优化图（onnxruntime）：
+
+```powershell
+bgmner-export-onnx `
+  --model-dir runs\bgm_bert_base\best_model `
+  --output-path runs\bgm_bert_base\onnx\model.onnx `
+  --optimize `
+  --optimize-level all
+```
+
 ---
 
 ## 8. 量化与评估
 
-### 7.1 INT8 量化（默认线性层）
+### 8.1 INT8 量化（默认保真配置）
 
 ```powershell
 bgmner-quantize-int8 `
   --input-onnx runs\bgm_bert_base\onnx\model.onnx `
   --output-onnx runs\bgm_bert_base\onnx\model.int8.dynamic.onnx `
-  --op-types "MatMul,Gemm"
+  --op-types "Gather,EmbedLayerNormalization"
 ```
 
-### 7.2 含 Embedding 量化（可选）
+说明：
+
+- 默认会先执行 ONNX 预处理（`quant_pre_process`）再量化，用于消除 ORT 的预处理警告。
+- 预处理默认跳过 `symbolic shape inference`（对 Transformer 模型更稳）。
+- 如需关闭预处理，可添加 `--no-preprocess`。
+- 当前项目实践中，`Gather,EmbedLayerNormalization` 往往更能兼顾 F1 和体积。
+
+### 8.2 激进压缩（可选，可能带来明显劣化）
 
 ```powershell
 bgmner-quantize-int8 `
   --input-onnx runs\bgm_bert_base\onnx\model.onnx `
-  --output-onnx runs\bgm_bert_base\onnx\model.int8.dynamic.with_gather.onnx `
-  --op-types "MatMul,Gemm,Gather,EmbedLayerNormalization" `
+  --output-onnx runs\bgm_bert_base\onnx\model.int8.dynamic.aggressive.onnx `
+  --op-types "MatMul,Gemm" `
   --weight-type qint8 `
   --per-channel
 ```
 
-### 7.3 ONNX 评估
+### 8.3 ONNX 评估
 
 ```powershell
 bgmner-eval-onnx `
