@@ -7,7 +7,6 @@ from pathlib import Path
 from typing import Iterable, Sequence, TypeVar
 
 import numpy as np
-import onnxruntime as ort
 from transformers import AutoTokenizer, DataCollatorForTokenClassification
 
 from .data import (
@@ -21,6 +20,7 @@ from .metrics import (
     labels_from_predictions_and_references,
     safe_classification_report,
 )
+from .onnx_runtime import build_onnx_session, default_provider_argument
 
 
 T = TypeVar("T")
@@ -35,7 +35,7 @@ def evaluate_onnx_model(
     onnx_path: Path,
     model_dir: Path,
     dataset_file: Path,
-    provider: str = "CPUExecutionProvider",
+    provider: str = default_provider_argument(),
     batch_size: int = 32,
     max_length: int = 256,
     max_samples: int = 0,
@@ -50,10 +50,6 @@ def evaluate_onnx_model(
     labels_path = dataset_file.parent / "labels.txt"
     if not labels_path.exists():
         raise FileNotFoundError(f"labels.txt not found: {labels_path}")
-
-    available = ort.get_available_providers()
-    if provider not in available:
-        raise RuntimeError(f"Provider '{provider}' not available. Available: {available}")
 
     tokenizer = AutoTokenizer.from_pretrained(model_dir, use_fast=True)
     if not getattr(tokenizer, "is_fast", False):
@@ -75,7 +71,12 @@ def evaluate_onnx_model(
     )
     collator = DataCollatorForTokenClassification(tokenizer=tokenizer)
 
-    session = ort.InferenceSession(str(onnx_path), providers=[provider])
+    session, provider_chain, available_providers = build_onnx_session(
+        onnx_path=onnx_path,
+        provider=provider,
+    )
+    session_providers = list(session.get_providers())
+    active_provider = session_providers[0] if session_providers else provider_chain[0]
     input_names = {item.name for item in session.get_inputs()}
 
     all_true: list[list[str]] = []
@@ -105,7 +106,11 @@ def evaluate_onnx_model(
     metrics = compute_sequence_metrics(all_true, all_pred)
     metrics.update(
         {
-            "provider": provider,
+            "provider": active_provider,
+            "requested_provider": provider,
+            "provider_chain": provider_chain,
+            "session_providers": session_providers,
+            "available_providers": available_providers,
             "samples": len(dataset),
             "runtime_sec": runtime_sec,
             "samples_per_sec": len(dataset) / runtime_sec if runtime_sec > 0 else 0.0,
@@ -120,7 +125,16 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--onnx-path", required=True)
     parser.add_argument("--model-dir", required=True)
     parser.add_argument("--dataset-file", default="data/ner_data/dev.txt")
-    parser.add_argument("--provider", default="CPUExecutionProvider")
+    parser.add_argument(
+        "--provider",
+        default=default_provider_argument(),
+        help=(
+            "onnxruntime execution provider. Supports aliases: "
+            "cpu/coreml/cuda/rocm/dml. "
+            "You can pass a chain like 'coreml,cpu'; "
+            "use 'auto' for platform defaults."
+        ),
+    )
     parser.add_argument("--batch-size", type=int, default=32)
     parser.add_argument("--max-length", type=int, default=256)
     parser.add_argument("--max-samples", type=int, default=0)

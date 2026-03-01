@@ -10,6 +10,7 @@ import onnxruntime as ort
 from transformers import AutoConfig, AutoTokenizer
 
 from .inference_utils import predict_entities_from_token_ids, sanitize_word_ids
+from .onnx_runtime import build_onnx_session, default_provider_argument
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -27,8 +28,13 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--max-length", type=int, default=256)
     parser.add_argument(
         "--provider",
-        default="CPUExecutionProvider",
-        help="onnxruntime execution provider.",
+        default=default_provider_argument(),
+        help=(
+            "onnxruntime execution provider. Supports aliases: "
+            "cpu/coreml/cuda/rocm/dml. "
+            "You can pass a chain like 'coreml,cpu'; "
+            "use 'auto' for platform defaults."
+        ),
     )
     return parser
 
@@ -115,12 +121,7 @@ def main(argv: List[str] | None = None) -> None:
     if not model_dir.exists():
         raise FileNotFoundError(f"Model dir not found: {model_dir}")
 
-    available_providers = ort.get_available_providers()
-    if args.provider not in available_providers:
-        raise RuntimeError(
-            f"Provider '{args.provider}' not available. Available: {available_providers}"
-        )
-    session = ort.InferenceSession(str(onnx_path), providers=[args.provider])
+    session, _, _ = build_onnx_session(onnx_path=onnx_path, provider=args.provider)
 
     tokenizer = AutoTokenizer.from_pretrained(model_dir, use_fast=True)
     config = AutoConfig.from_pretrained(model_dir)
@@ -154,4 +155,3 @@ def main(argv: List[str] | None = None) -> None:
 
 if __name__ == "__main__":
     main()
-

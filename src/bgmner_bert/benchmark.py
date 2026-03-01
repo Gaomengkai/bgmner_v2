@@ -12,6 +12,7 @@ from transformers import AutoConfig, AutoModelForTokenClassification, AutoTokeni
 
 from .onnx_predict import iter_batches as onnx_iter_batches
 from .onnx_predict import predict_batch as onnx_predict_batch
+from .onnx_runtime import build_onnx_session, default_provider_argument
 from .predict import iter_batches as hf_iter_batches
 from .predict import predict_batch as hf_predict_batch
 from .predict import resolve_device
@@ -244,14 +245,15 @@ def benchmark_onnx(
     warmup_runs: int,
     benchmark_runs: int,
 ) -> dict[str, Any]:
-    available = ort.get_available_providers()
-    if provider not in available:
-        raise RuntimeError(f"Provider '{provider}' not available. Available: {available}")
-
     tokenizer = AutoTokenizer.from_pretrained(model_dir, use_fast=True)
     config = AutoConfig.from_pretrained(model_dir)
     id2label = {int(key): value for key, value in config.id2label.items()}
-    session = ort.InferenceSession(str(onnx_path), providers=[provider])
+    session, provider_chain, available_providers = build_onnx_session(
+        onnx_path=onnx_path,
+        provider=provider,
+    )
+    session_providers = list(session.get_providers())
+    active_provider = session_providers[0] if session_providers else provider_chain[0]
 
     for _ in range(warmup_runs):
         _run_onnx_once(
@@ -288,7 +290,11 @@ def benchmark_onnx(
         extra={
             "model_dir": str(model_dir),
             "onnx_path": str(onnx_path),
-            "provider": provider,
+            "provider": active_provider,
+            "requested_provider": provider,
+            "provider_chain": provider_chain,
+            "session_providers": session_providers,
+            "available_providers": available_providers,
         },
     )
 
@@ -298,7 +304,16 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--backend", choices=["hf", "onnx"], default="hf")
     parser.add_argument("--model-dir", required=True, help="Path to best_model directory.")
     parser.add_argument("--onnx-path", default="", help="Required when backend=onnx.")
-    parser.add_argument("--provider", default="CPUExecutionProvider")
+    parser.add_argument(
+        "--provider",
+        default=default_provider_argument(),
+        help=(
+            "onnxruntime execution provider. Supports aliases: "
+            "cpu/coreml/cuda/rocm/dml. "
+            "You can pass a chain like 'coreml,cpu'; "
+            "use 'auto' for platform defaults."
+        ),
+    )
     parser.add_argument("--device", default="auto", choices=["auto", "cpu", "cuda"])
     parser.add_argument("--text", default="", help="Single input text.")
     parser.add_argument("--input-file", default="", help="Input file, one text/jsonl line per sample.")

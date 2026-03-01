@@ -7,7 +7,6 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Protocol
 
-import onnxruntime as ort
 import uvicorn
 from fastapi import FastAPI, HTTPException, Request, Response
 from pydantic import BaseModel, Field
@@ -15,6 +14,7 @@ from transformers import AutoConfig, AutoModelForTokenClassification, AutoTokeni
 
 from .onnx_predict import iter_batches as onnx_iter_batches
 from .onnx_predict import predict_batch as onnx_predict_batch
+from .onnx_runtime import build_onnx_session, default_provider_argument
 from .predict import iter_batches as hf_iter_batches
 from .predict import predict_batch as hf_predict_batch
 from .predict import resolve_device
@@ -107,14 +107,16 @@ class OnnxPredictor:
     backend = "onnx"
 
     def __init__(self, onnx_path: Path, model_dir: Path, provider: str) -> None:
-        available = ort.get_available_providers()
-        if provider not in available:
-            raise RuntimeError(f"Provider '{provider}' not available. Available: {available}")
-        self.session = ort.InferenceSession(str(onnx_path), providers=[provider])
+        self.session, provider_chain, _ = build_onnx_session(
+            onnx_path=onnx_path,
+            provider=provider,
+        )
         self.tokenizer = AutoTokenizer.from_pretrained(model_dir, use_fast=True)
         config = AutoConfig.from_pretrained(model_dir)
         self.id2label = {int(key): value for key, value in config.id2label.items()}
-        self.reference = f"{onnx_path} @ {provider}"
+        session_providers = list(self.session.get_providers())
+        active_provider = session_providers[0] if session_providers else provider_chain[0]
+        self.reference = f"{onnx_path} @ {active_provider}"
 
     def predict(self, texts: list[str], batch_size: int, max_length: int) -> list[dict[str, Any]]:
         results: list[dict[str, Any]] = []
@@ -203,7 +205,16 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--model-dir", required=True, help="Path to HF best_model directory.")
     parser.add_argument("--onnx-path", default="", help="Required when backend=onnx.")
     parser.add_argument("--device", default="auto", choices=["auto", "cpu", "cuda"])
-    parser.add_argument("--provider", default="CPUExecutionProvider")
+    parser.add_argument(
+        "--provider",
+        default=default_provider_argument(),
+        help=(
+            "onnxruntime execution provider. Supports aliases: "
+            "cpu/coreml/cuda/rocm/dml. "
+            "You can pass a chain like 'coreml,cpu'; "
+            "use 'auto' for platform defaults."
+        ),
+    )
     parser.add_argument("--batch-size", type=int, default=32)
     parser.add_argument("--max-length", type=int, default=256)
     parser.add_argument("--host", default="0.0.0.0")

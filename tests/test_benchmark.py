@@ -16,6 +16,7 @@ from bgmner_bert.benchmark import (  # noqa: E402
     parse_input_line,
     summarize_benchmark_metrics,
 )
+from bgmner_bert.onnx_runtime import default_provider_argument  # noqa: E402
 
 
 class BenchmarkHelpersTest(unittest.TestCase):
@@ -67,6 +68,22 @@ class BenchmarkHelpersTest(unittest.TestCase):
         )
         with self.assertRaises(ValueError):
             _validate_args(args)
+
+    def test_onnx_provider_default_follows_platform_policy(self) -> None:
+        parser = build_parser()
+        args = parser.parse_args(
+            [
+                "--backend",
+                "onnx",
+                "--model-dir",
+                "runs/x/best_model",
+                "--onnx-path",
+                "runs/x/onnx/model.onnx",
+                "--text",
+                "hello",
+            ]
+        )
+        self.assertEqual(args.provider, default_provider_argument())
 
 
 if __name__ == "__main__":

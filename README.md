@@ -12,7 +12,23 @@
 
 ---
 
-## 1. 环境准备（Windows + AMD）
+## 1. 环境准备
+
+### 1.1 macOS（Apple silicon）+ uv（推荐）
+
+```bash
+uv sync
+uv run python -c "import onnxruntime as ort; print(ort.get_available_providers())"
+```
+
+macOS 下 `--provider` 默认值是 `cpu`（稳定优先）。
+如需启用 CoreML 加速，可显式设置 `--provider coreml,cpu`（CoreML 优先，CPU 回退）。
+
+Provider 支持别名：`cpu`、`coreml`、`cuda`、`rocm`、`dml`（会映射到 ONNX Runtime 对应 ExecutionProvider 名称）。
+
+在 `uv` 环境下，以下命令可统一写成 `uv run <命令>`，例如：`uv run bgmner-onnx-predict ...`。
+
+### 1.2 Windows + AMD
 
 ```powershell
 powershell -ExecutionPolicy Bypass -File .\scripts\install_torch_rocm_win_amd.ps1
@@ -142,6 +158,7 @@ bgmner-predict `
 bgmner-onnx-predict `
   --onnx-path runs\bgm_bert_base\onnx\model.onnx `
   --model-dir runs\bgm_bert_base\best_model `
+  --provider coreml,cpu `
   --text "[LoliHouse] 迷宫饭 / Dungeon Meshi [15][1080p][繁体内嵌]"
 ```
 
@@ -175,7 +192,7 @@ bgmner-benchmark `
   --backend onnx `
   --model-dir runs\bgm_bert_base\best_model `
   --onnx-path runs\bgm_bert_base\onnx\model.int8.dynamic.onnx `
-  --provider CPUExecutionProvider `
+  --provider coreml,cpu `
   --input-file data\ner_data\dev.txt `
   --batch-size 32 `
   --max-length 256 `
@@ -242,7 +259,7 @@ bgmner-eval-onnx `
   --onnx-path runs\bgm_bert_base\onnx\model.int8.dynamic.onnx `
   --model-dir runs\bgm_bert_base\best_model `
   --dataset-file data\ner_data\dev.txt `
-  --provider CPUExecutionProvider
+  --provider coreml,cpu
 ```
 
 ---
@@ -266,7 +283,7 @@ bgmner-api `
   --backend onnx `
   --model-dir runs\bgm_bert_base\best_model `
   --onnx-path runs\bgm_bert_base\onnx\model.int8.dynamic.onnx `
-  --provider CPUExecutionProvider `
+  --provider coreml,cpu `
   --host 0.0.0.0 `
   --port 8000
 ```
