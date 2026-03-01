@@ -26,6 +26,7 @@ dependencies = [
 bgmner-download-backbone = "bgmner_bert.download_backbone:main"
 bgmner-train = "bgmner_bert.train:main"
 bgmner-predict = "bgmner_bert.predict:main"
+bgmner-benchmark = "bgmner_bert.benchmark:main"
 bgmner-export-onnx = "bgmner_bert.export_onnx:main"
 bgmner-onnx-predict = "bgmner_bert.onnx_predict:main"
 bgmner-quantize-int8 = "bgmner_bert.quantize_int8:main"

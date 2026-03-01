@@ -4,6 +4,7 @@
 
 - 训练（支持命令行和外部 JSON 超参数）
 - 推理（HF / ONNX）
+- 基准测试（HF / ONNX）
 - 导出 ONNX
 - INT8 量化
 - ONNX 评估
@@ -146,7 +147,46 @@ bgmner-onnx-predict `
 
 ---
 
-## 6. 导出 ONNX
+## 6. 基准测试（HF / ONNX）
+
+说明：
+
+- 支持 `--text` 或 `--input-file`（可直接读取 `data/ner_data/dev.txt` 这类 JSONL）。
+- 输出包含吞吐和延迟统计：`throughput_texts_per_sec`、`batch_latency_ms_p50/p95/p99`。
+
+### 6.1 HF 基准
+
+```powershell
+bgmner-benchmark `
+  --backend hf `
+  --model-dir runs\bgm_bert_base\best_model `
+  --input-file data\ner_data\dev.txt `
+  --batch-size 32 `
+  --max-length 256 `
+  --warmup-runs 3 `
+  --benchmark-runs 20 `
+  --max-samples 300
+```
+
+### 6.2 ONNX 基准
+
+```powershell
+bgmner-benchmark `
+  --backend onnx `
+  --model-dir runs\bgm_bert_base\best_model `
+  --onnx-path runs\bgm_bert_base\onnx\model.int8.dynamic.onnx `
+  --provider CPUExecutionProvider `
+  --input-file data\ner_data\dev.txt `
+  --batch-size 32 `
+  --max-length 256 `
+  --warmup-runs 3 `
+  --benchmark-runs 20 `
+  --output-json runs\bgm_bert_base\metrics\benchmark_onnx.json
+```
+
+---
+
+## 7. 导出 ONNX
 
 ```powershell
 bgmner-export-onnx `
@@ -156,7 +196,7 @@ bgmner-export-onnx `
 
 ---
 
-## 7. 量化与评估
+## 8. 量化与评估
 
 ### 7.1 INT8 量化（默认线性层）
 
@@ -190,7 +230,7 @@ bgmner-eval-onnx `
 
 ---
 
-## 8. Web API（支持多条输入）
+## 9. Web API（支持多条输入）
 
 启动 HF 后端：
 
@@ -247,7 +287,7 @@ curl -X POST http://127.0.0.1:8000/predict `
 
 ---
 
-## 9. 测试
+## 10. 测试
 
 ```powershell
 python -m unittest discover -s tests -p "test_*.py"
@@ -255,7 +295,7 @@ python -m unittest discover -s tests -p "test_*.py"
 
 ---
 
-## 10. 目录结构
+## 11. 目录结构
 
 ```text
 ./
@@ -275,6 +315,7 @@ python -m unittest discover -s tests -p "test_*.py"
     download_backbone.py
     train.py
     predict.py
+    benchmark.py
     export_onnx.py
     onnx_predict.py
     quantize_int8.py
@@ -288,6 +329,7 @@ python -m unittest discover -s tests -p "test_*.py"
     test_api.py
     test_bio_decode.py
     test_data_alignment.py
+    test_benchmark.py
     test_quantize_int8.py
     test_train_config_json.py
     test_onnx_parity.py
