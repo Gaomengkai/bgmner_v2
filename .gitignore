@@ -44,3 +44,6 @@ runs/
 # Optional large export artifacts
 *.onnx
 *.onnx.data
+
+# Rust artifacts
+rust/target/

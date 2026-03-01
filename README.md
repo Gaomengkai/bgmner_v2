@@ -370,3 +370,15 @@ python -m unittest discover -s tests -p "test_*.py"
   pyproject.toml
   README.md
 ```
+
+---
+
+## 12. Rust ONNX 子工程（Web API + 批处理）
+
+已新增独立 Rust 子工程：`rust/`。
+
+- 仅做 ONNX 推理，不影响现有 Python 训练/导出/量化流程。
+- 支持 `/health`、`/predict`（兼容 Python API 的 `text/texts/items` 入参）。
+- 支持批量文件推理（JSONL / 文本行）。
+
+详细用法见：`rust/README.md`。
