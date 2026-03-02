@@ -41,6 +41,10 @@ struct ServeArgs {
     batch_size: usize,
     #[arg(long, default_value_t = 256)]
     max_length: usize,
+    #[arg(long, default_value = "auto")]
+    provider: String,
+    #[arg(long, default_value_t = 0)]
+    dml_device_id: i32,
     #[arg(long, default_value = "info")]
     log_level: String,
 }
@@ -61,6 +65,10 @@ struct BatchArgs {
     batch_size: usize,
     #[arg(long, default_value_t = 256)]
     max_length: usize,
+    #[arg(long, default_value = "auto")]
+    provider: String,
+    #[arg(long, default_value_t = 0)]
+    dml_device_id: i32,
     #[arg(long, default_value = "info")]
     log_level: String,
 }
@@ -76,14 +84,24 @@ async fn main() -> Result<()> {
 
 async fn run_serve(args: ServeArgs) -> Result<()> {
     init_logging(&args.log_level);
-    let engine = OnnxNerEngine::load(&args.model_dir, &args.onnx_path)?;
+    let engine = OnnxNerEngine::load(
+        &args.model_dir,
+        &args.onnx_path,
+        &args.provider,
+        args.dml_device_id,
+    )?;
     let state = ApiState::new(engine, args.batch_size, args.max_length);
     run_server(state, &args.host, args.port).await
 }
 
 fn run_batch(args: BatchArgs) -> Result<()> {
     init_logging(&args.log_level);
-    let mut engine = OnnxNerEngine::load(&args.model_dir, &args.onnx_path)?;
+    let mut engine = OnnxNerEngine::load(
+        &args.model_dir,
+        &args.onnx_path,
+        &args.provider,
+        args.dml_device_id,
+    )?;
 
     let inputs = load_batch_inputs(&args.text, args.input_file.as_deref())?;
     let texts: Vec<String> = inputs.iter().map(|x| x.text.clone()).collect();

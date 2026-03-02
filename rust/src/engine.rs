@@ -2,6 +2,7 @@ use std::{
     collections::{BTreeSet, HashSet},
     env, fs,
     path::{Path, PathBuf},
+    time::{Duration, Instant},
 };
 
 use anyhow::{bail, Context, Result};
@@ -13,7 +14,11 @@ use tokenizers::{
     TruncationParams, TruncationStrategy,
 };
 
-use crate::{bio::decode_entities, types::PredictionRow};
+use crate::{
+    bio::decode_entities,
+    provider::{build_provider_dispatch_chain, resolve_provider_argument},
+    types::PredictionRow,
+};
 
 struct EncodedBatch {
     words_batch: Vec<Vec<String>>,
@@ -24,6 +29,53 @@ struct EncodedBatch {
     sequence_length: usize,
 }
 
+#[derive(Default)]
+struct StageTotals {
+    batches: usize,
+    texts: usize,
+    encode: Duration,
+    tensor: Duration,
+    infer: Duration,
+    argmax: Duration,
+    decode: Duration,
+}
+
+impl StageTotals {
+    fn reset(&mut self, texts: usize) {
+        *self = Self {
+            texts,
+            ..Self::default()
+        };
+    }
+
+    fn total(&self) -> Duration {
+        self.encode + self.tensor + self.infer + self.argmax + self.decode
+    }
+
+    fn to_summary_line(&self) -> String {
+        let total = self.total().as_secs_f64() * 1000.0;
+        if total <= 0.0 {
+            return format!("[profile] texts={} batches={} total_ms=0.00", self.texts, self.batches);
+        }
+        format!(
+            "[profile] texts={} batches={} total_ms={:.2} encode_ms={:.2} ({:.1}%) tensor_ms={:.2} ({:.1}%) infer_ms={:.2} ({:.1}%) argmax_ms={:.2} ({:.1}%) decode_ms={:.2} ({:.1}%)",
+            self.texts,
+            self.batches,
+            total,
+            self.encode.as_secs_f64() * 1000.0,
+            self.encode.as_secs_f64() * 1000.0 * 100.0 / total,
+            self.tensor.as_secs_f64() * 1000.0,
+            self.tensor.as_secs_f64() * 1000.0 * 100.0 / total,
+            self.infer.as_secs_f64() * 1000.0,
+            self.infer.as_secs_f64() * 1000.0 * 100.0 / total,
+            self.argmax.as_secs_f64() * 1000.0,
+            self.argmax.as_secs_f64() * 1000.0 * 100.0 / total,
+            self.decode.as_secs_f64() * 1000.0,
+            self.decode.as_secs_f64() * 1000.0 * 100.0 / total,
+        )
+    }
+}
+
 pub struct OnnxNerEngine {
     tokenizer: Tokenizer,
     session: Session,
@@ -31,10 +83,17 @@ pub struct OnnxNerEngine {
     pad_id: u32,
     pad_token: String,
     reference: String,
+    profile_stages: bool,
+    stage_totals: StageTotals,
 }
 
 impl OnnxNerEngine {
-    pub fn load(model_dir: &Path, onnx_path: &Path) -> Result<Self> {
+    pub fn load(
+        model_dir: &Path,
+        onnx_path: &Path,
+        provider: &str,
+        dml_device_id: i32,
+    ) -> Result<Self> {
         if !model_dir.exists() {
             bail!("Model dir not found: {}", model_dir.display());
         }
@@ -43,6 +102,9 @@ impl OnnxNerEngine {
         }
 
         initialize_ort_runtime()?;
+        let provider_resolution = resolve_provider_argument(provider)?;
+        let provider_dispatches =
+            build_provider_dispatch_chain(&provider_resolution.chain, dml_device_id)?;
 
         let tokenizer_path = model_dir.join("tokenizer.json");
         if !tokenizer_path.exists() {
@@ -57,16 +119,30 @@ impl OnnxNerEngine {
 
         let session = Session::builder()
             .context("failed to create ONNX session builder")?
+            .with_execution_providers(provider_dispatches)
+            .with_context(|| {
+                format!(
+                    "failed to apply provider chain {:?} (available: {:?})",
+                    provider_resolution.chain, provider_resolution.available
+                )
+            })?
             .commit_from_file(onnx_path)
             .with_context(|| format!("failed to load ONNX: {}", onnx_path.display()))?;
 
+        let profile_stages = env_flag_enabled("BGMNER_PROFILE_STAGES");
         Ok(Self {
             tokenizer,
             session,
             id2label,
             pad_id,
             pad_token,
-            reference: onnx_path.display().to_string(),
+            reference: format!(
+                "{} @ {}",
+                onnx_path.display(),
+                provider_resolution.chain.join(",")
+            ),
+            profile_stages,
+            stage_totals: StageTotals::default(),
         })
     }
 
@@ -94,19 +170,29 @@ impl OnnxNerEngine {
             bail!("max_length must be >= 1");
         }
 
+        if self.profile_stages {
+            self.stage_totals.reset(texts.len());
+        }
+
         let mut all_rows = Vec::new();
         for chunk in texts.chunks(batch_size) {
             all_rows.extend(self.predict_batch(chunk, max_length)?);
+        }
+        if self.profile_stages {
+            eprintln!("{}", self.stage_totals.to_summary_line());
         }
         Ok(all_rows)
     }
 
     fn predict_batch(&mut self, texts: &[String], max_length: usize) -> Result<Vec<PredictionRow>> {
+        let encode_start = Instant::now();
         let encoded = self.encode_batch(texts, max_length)?;
+        let encode_elapsed = encode_start.elapsed();
         if encoded.batch_size == 0 {
             return Ok(Vec::new());
         }
 
+        let tensor_start = Instant::now();
         let input_ids = Array2::from_shape_vec(
             (encoded.batch_size, encoded.sequence_length),
             encoded.input_ids,
@@ -122,7 +208,9 @@ impl OnnxNerEngine {
             .context("failed to create input_ids tensor view")?;
         let attention_mask_tensor = TensorRef::from_array_view(attention_mask.view())
             .context("failed to create attention_mask tensor view")?;
+        let tensor_elapsed = tensor_start.elapsed();
 
+        let infer_start = Instant::now();
         let outputs = self
             .session
             .run(ort::inputs! {
@@ -154,7 +242,9 @@ impl OnnxNerEngine {
                 encoded.sequence_length
             );
         }
+        let infer_elapsed = infer_start.elapsed();
 
+        let argmax_start = Instant::now();
         let mut token_pred_ids = vec![vec![0usize; logits_seq]; logits_batch];
         for (batch_idx, sample_preds) in token_pred_ids.iter_mut().enumerate().take(logits_batch) {
             for (token_idx, label_slot) in sample_preds.iter_mut().enumerate().take(logits_seq) {
@@ -171,7 +261,9 @@ impl OnnxNerEngine {
                 *label_slot = best_idx;
             }
         }
+        let argmax_elapsed = argmax_start.elapsed();
 
+        let decode_start = Instant::now();
         let mut rows = Vec::with_capacity(logits_batch);
         for idx in 0..logits_batch {
             let words = &encoded.words_batch[idx];
@@ -187,6 +279,16 @@ impl OnnxNerEngine {
                 entities,
                 pred_labels: word_tags,
             });
+        }
+        let decode_elapsed = decode_start.elapsed();
+
+        if self.profile_stages {
+            self.stage_totals.batches += 1;
+            self.stage_totals.encode += encode_elapsed;
+            self.stage_totals.tensor += tensor_elapsed;
+            self.stage_totals.infer += infer_elapsed;
+            self.stage_totals.argmax += argmax_elapsed;
+            self.stage_totals.decode += decode_elapsed;
         }
 
         Ok(rows)
@@ -352,6 +454,14 @@ fn resolve_padding(tokenizer: &Tokenizer) -> (u32, String) {
     (pad_id, pad_token)
 }
 
+fn env_flag_enabled(name: &str) -> bool {
+    let Some(value) = env::var_os(name) else {
+        return false;
+    };
+    let text = value.to_string_lossy().trim().to_ascii_lowercase();
+    matches!(text.as_str(), "1" | "true" | "yes" | "on")
+}
+
 fn dim_to_usize(dim: i64, name: &str) -> Result<usize> {
     if dim < 0 {
         bail!("tensor dimension {name} is negative: {dim}");
@@ -360,18 +470,27 @@ fn dim_to_usize(dim: i64, name: &str) -> Result<usize> {
 }
 
 fn initialize_ort_runtime() -> Result<()> {
-    if let Some(path) = env::var_os("ORT_DYLIB_PATH") {
-        let path = PathBuf::from(path);
-        if !path.exists() {
-            bail!(
-                "ORT_DYLIB_PATH is set but file does not exist: {}",
-                path.display()
-            );
+    maybe_preload_directml_from_exe_dir()?;
+
+    if let Some(raw_path) = env::var_os("ORT_DYLIB_PATH") {
+        let raw_text = raw_path.to_string_lossy();
+        let trimmed = raw_text.trim();
+        if trimmed.is_empty() {
+            // Treat empty env var as unset and fall back to automatic discovery.
+            env::remove_var("ORT_DYLIB_PATH");
+        } else {
+            let path = PathBuf::from(trimmed);
+            if !path.exists() {
+                bail!(
+                    "ORT_DYLIB_PATH is set but file does not exist: {}",
+                    path.display()
+                );
+            }
+            let builder = ort::init_from(&path)
+                .with_context(|| format!("failed to load ORT from {}", path.display()))?;
+            let _ = builder.with_name("bgmner-rs").commit();
+            return Ok(());
         }
-        let builder = ort::init_from(&path)
-            .with_context(|| format!("failed to load ORT from {}", path.display()))?;
-        let _ = builder.with_name("bgmner-rs").commit();
-        return Ok(());
     }
 
     let mut attempts = Vec::<String>::new();
@@ -399,6 +518,25 @@ fn initialize_ort_runtime() -> Result<()> {
     );
 }
 
+fn maybe_preload_directml_from_exe_dir() -> Result<()> {
+    if !cfg!(target_os = "windows") {
+        return Ok(());
+    }
+    let Ok(exe) = env::current_exe() else {
+        return Ok(());
+    };
+    let Some(dir) = exe.parent() else {
+        return Ok(());
+    };
+    let dml_path = dir.join("DirectML.dll");
+    if !dml_path.exists() {
+        return Ok(());
+    }
+    ort::util::preload_dylib(&dml_path)
+        .with_context(|| format!("failed to preload DirectML runtime: {}", dml_path.display()))?;
+    Ok(())
+}
+
 fn collect_ort_dylib_candidates() -> Vec<PathBuf> {
     let lib_name = if cfg!(target_os = "windows") {
         "onnxruntime.dll"
@@ -410,6 +548,15 @@ fn collect_ort_dylib_candidates() -> Vec<PathBuf> {
 
     let mut ordered = Vec::<PathBuf>::new();
     let mut seen = BTreeSet::<PathBuf>::new();
+
+    if cfg!(target_os = "windows") {
+        if let Ok(exe) = env::current_exe() {
+            if let Some(dir) = exe.parent() {
+                // Highest priority on Windows: dll next to executable.
+                push_unique_candidate(&mut ordered, &mut seen, dir.join(lib_name));
+            }
+        }
+    }
 
     if let Some(prefix) = env::var_os("CONDA_PREFIX") {
         push_env_root_candidates(
@@ -432,6 +579,7 @@ fn collect_ort_dylib_candidates() -> Vec<PathBuf> {
 
     if let Some(raw_path) = env::var_os("PATH") {
         for entry in env::split_paths(&raw_path) {
+            // Lowest priority fallback: dynamic loader search path.
             push_unique_candidate(&mut ordered, &mut seen, entry.join(lib_name));
             push_env_root_candidates(&mut ordered, &mut seen, &entry, lib_name, true);
             if let Some(parent) = entry.parent() {
@@ -440,9 +588,11 @@ fn collect_ort_dylib_candidates() -> Vec<PathBuf> {
         }
     }
 
-    if let Ok(exe) = env::current_exe() {
-        if let Some(dir) = exe.parent() {
-            push_unique_candidate(&mut ordered, &mut seen, dir.join(lib_name));
+    if !cfg!(target_os = "windows") {
+        if let Ok(exe) = env::current_exe() {
+            if let Some(dir) = exe.parent() {
+                push_unique_candidate(&mut ordered, &mut seen, dir.join(lib_name));
+            }
         }
     }
     ordered

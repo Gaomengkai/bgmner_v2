@@ -35,6 +35,55 @@ powershell -ExecutionPolicy Bypass -File .\scripts\install_torch_rocm_win_amd.ps
 python -m pip install -e .
 ```
 
+### 1.3 Windows 运行时获取（DirectML + ONNX Runtime）
+
+请优先使用 NuGet 官方包，不要依赖 `Office` 或 `System32` 里的 `DirectML.dll`。
+
+对应关系：
+
+- `Microsoft.AI.DirectML`：`DirectML.dll`（DirectML 可再分发运行时）
+- `Microsoft.ML.OnnxRuntime`：CPU 版 ONNX Runtime 运行时
+- `Microsoft.ML.OnnxRuntime.DirectML`：带 DirectML EP 的 ONNX Runtime 运行时
+
+NuGet 页面：
+
+- `https://www.nuget.org/packages/Microsoft.AI.DirectML/`
+- `https://www.nuget.org/packages/Microsoft.ML.OnnxRuntime/`
+- `https://www.nuget.org/packages/Microsoft.ML.OnnxRuntime.DirectML/`
+
+如果你是 C# 工程，可直接：
+
+```powershell
+dotnet add package Microsoft.AI.DirectML
+dotnet add package Microsoft.ML.OnnxRuntime
+dotnet add package Microsoft.ML.OnnxRuntime.DirectML
+```
+
+如果你是本工程（Python/Rust）这类非 C# 场景，可直接下载 nupkg 并解包：
+
+```powershell
+$dmlVer = "1.15.4"
+$ortVer = "1.24.0"
+$outDir = ".\\third_party\\nuget"
+New-Item -ItemType Directory -Force -Path $outDir | Out-Null
+
+Invoke-WebRequest "https://www.nuget.org/api/v2/package/Microsoft.AI.DirectML/$dmlVer" -OutFile "$outDir\\Microsoft.AI.DirectML.$dmlVer.nupkg"
+Invoke-WebRequest "https://www.nuget.org/api/v2/package/Microsoft.ML.OnnxRuntime/$ortVer" -OutFile "$outDir\\Microsoft.ML.OnnxRuntime.$ortVer.nupkg"
+Invoke-WebRequest "https://www.nuget.org/api/v2/package/Microsoft.ML.OnnxRuntime.DirectML/$ortVer" -OutFile "$outDir\\Microsoft.ML.OnnxRuntime.DirectML.$ortVer.nupkg"
+
+Expand-Archive -Force "$outDir\\Microsoft.AI.DirectML.$dmlVer.nupkg" "$outDir\\Microsoft.AI.DirectML.$dmlVer"
+Expand-Archive -Force "$outDir\\Microsoft.ML.OnnxRuntime.$ortVer.nupkg" "$outDir\\Microsoft.ML.OnnxRuntime.$ortVer"
+Expand-Archive -Force "$outDir\\Microsoft.ML.OnnxRuntime.DirectML.$ortVer.nupkg" "$outDir\\Microsoft.ML.OnnxRuntime.DirectML.$ortVer"
+```
+
+用于 Rust `bgmner-rs.exe` 时，至少保证和 `exe` 同目录有：
+
+- `onnxruntime.dll`
+- `onnxruntime_providers_shared.dll`
+- `DirectML.dll`
+
+建议 `Microsoft.ML.OnnxRuntime` 与 `Microsoft.ML.OnnxRuntime.DirectML` 使用相同版本号，减少 ABI/Provider 兼容风险。
+
 ---
 
 ## 2. 数据集纳入工程（复制 + 排序）
@@ -380,5 +429,6 @@ python -m unittest discover -s tests -p "test_*.py"
 - 仅做 ONNX 推理，不影响现有 Python 训练/导出/量化流程。
 - 支持 `/health`、`/predict`（兼容 Python API 的 `text/texts/items` 入参）。
 - 支持批量文件推理（JSONL / 文本行）。
+- 支持 `--provider`（`dml` 等别名 + 官方 Provider 名称）。
 
 详细用法见：`rust/README.md`。
