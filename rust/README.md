@@ -61,6 +61,40 @@ Invoke-WebRequest "https://www.nuget.org/api/v2/package/Microsoft.ML.OnnxRuntime
 
 并保持 `Microsoft.ML.OnnxRuntime` 与 `Microsoft.ML.OnnxRuntime.DirectML` 同版本。
 
+### 2.2 macOS（Apple Silicon）CoreML 版 ORT（GitHub Release）
+
+macOS 建议直接使用 ONNX Runtime 官方发布包（含 `libonnxruntime.dylib`）。
+
+示例（`v1.24.2`）：
+
+```bash
+cd /path/to/bgmner_v2
+mkdir -p third_party/ort_1.24.2
+
+curl -fL -o /tmp/onnxruntime-osx-arm64-1.24.2.tgz \
+  https://github.com/microsoft/onnxruntime/releases/download/v1.24.2/onnxruntime-osx-arm64-1.24.2.tgz
+
+tar -xzf /tmp/onnxruntime-osx-arm64-1.24.2.tgz \
+  -C third_party/ort_1.24.2 \
+  --strip-components=1
+
+# 可选：若被 Gatekeeper 标记隔离
+xattr -dr com.apple.quarantine third_party/ort_1.24.2
+
+export ORT_DYLIB_PATH="$PWD/third_party/ort_1.24.2/lib/libonnxruntime.dylib"
+```
+
+可用 `coreml,cpu` 作为 provider 回退链：
+
+```bash
+cd rust
+./target/release/bgmner-rs batch \
+  --model-dir ../runs/bgm_ner_20ep_mmBERT_small/best_model \
+  --onnx-path ../runs/bgm_ner_20ep_mmBERT_small/onnx/model.int8.dynamic.onnx \
+  --provider coreml,cpu \
+  --text "测试标题"
+```
+
 ## 3. 启动 Web API
 
 ```powershell

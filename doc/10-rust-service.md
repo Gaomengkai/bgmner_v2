@@ -82,6 +82,38 @@ ONNX Runtime DLL 搜索优先级：
 - 不使用当前工作目录（PWD）作为优先搜索路径
 - `ORT_DYLIB_PATH` 空值会被忽略
 
+### 5.1 macOS CoreML dylib（GitHub Release）
+
+macOS（Apple Silicon）可直接使用 ONNX Runtime 官方发布包：
+
+- `https://github.com/microsoft/onnxruntime/releases/download/v1.24.2/onnxruntime-osx-arm64-1.24.2.tgz`
+
+示例：
+
+```bash
+cd /path/to/bgmner_v2
+mkdir -p third_party/ort_1.24.2
+
+curl -fL -o /tmp/onnxruntime-osx-arm64-1.24.2.tgz \
+  https://github.com/microsoft/onnxruntime/releases/download/v1.24.2/onnxruntime-osx-arm64-1.24.2.tgz
+
+tar -xzf /tmp/onnxruntime-osx-arm64-1.24.2.tgz \
+  -C third_party/ort_1.24.2 \
+  --strip-components=1
+
+# 可选：去掉 macOS 隔离标记
+xattr -dr com.apple.quarantine third_party/ort_1.24.2
+
+export ORT_DYLIB_PATH="$PWD/third_party/ort_1.24.2/lib/libonnxruntime.dylib"
+```
+
+运行时建议使用回退链：
+
+```bash
+cd rust
+./target/release/bgmner-rs batch ... --provider coreml,cpu
+```
+
 ## 6. DirectML 运行时
 
 建议把以下 DLL 放在 `bgmner-rs.exe` 同目录：
@@ -120,4 +152,3 @@ $env:BGMNER_PROFILE_STAGES="1"
 - `infer`
 - `argmax`
 - `decode`
-

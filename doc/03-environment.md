@@ -73,12 +73,41 @@ Invoke-WebRequest "https://www.nuget.org/api/v2/package/Microsoft.ML.OnnxRuntime
 
 建议保持 `OnnxRuntime` 与 `OnnxRuntime.DirectML` 同版本。
 
+### 3.1 macOS（Apple Silicon）CoreML 版 ORT（GitHub）
+
+macOS 可直接下载 ONNX Runtime 官方发布包（含 `libonnxruntime.dylib`）：
+
+- `https://github.com/microsoft/onnxruntime/releases/download/v1.24.2/onnxruntime-osx-arm64-1.24.2.tgz`
+
+示例：
+
+```bash
+cd /path/to/bgmner_v2
+mkdir -p third_party/ort_1.24.2
+
+curl -fL -o /tmp/onnxruntime-osx-arm64-1.24.2.tgz \
+  https://github.com/microsoft/onnxruntime/releases/download/v1.24.2/onnxruntime-osx-arm64-1.24.2.tgz
+
+tar -xzf /tmp/onnxruntime-osx-arm64-1.24.2.tgz \
+  -C third_party/ort_1.24.2 \
+  --strip-components=1
+
+# 可选：解除隔离标记
+xattr -dr com.apple.quarantine third_party/ort_1.24.2
+```
+
 ## 4. 环境变量
 
 Rust ONNX 动态加载库路径可通过：
 
 ```powershell
 $env:ORT_DYLIB_PATH="E:\conda\envs\bgmner\Lib\site-packages\onnxruntime\capi\onnxruntime.dll"
+```
+
+macOS 示例：
+
+```bash
+export ORT_DYLIB_PATH="/path/to/bgmner_v2/third_party/ort_1.24.2/lib/libonnxruntime.dylib"
 ```
 
 说明：
