@@ -10,6 +10,12 @@
 - ONNX 评估
 - Web API（支持多条输入）
 
+## 文档入口
+
+完整工程文档请看：
+
+- [doc/README.md](doc/README.md)
+
 ---
 
 ## 1. 环境准备
