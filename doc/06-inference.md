@@ -21,7 +21,8 @@ bgmner-predict `
   --output-file runs\bgm_ner_20ep_xlmr\predictions\dev_hf.jsonl
 ```
 
-`--device` 可选：`auto` / `cpu` / `cuda`。
+`--device` 可选：`auto` / `cpu` / `cuda` / `mps`。  
+`auto` 优先级：`cuda -> mps -> cpu`。
 
 ## 2. ONNX 推理
 
@@ -83,4 +84,3 @@ HF/ONNX CLI 的 `--input-file` 默认逐行读取。
 
 也支持官方名称（如 `CPUExecutionProvider`）。  
 可链式设置回退，例如：`--provider dml,cpu`。
-

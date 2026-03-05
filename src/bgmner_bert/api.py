@@ -204,7 +204,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--backend", choices=["hf", "onnx"], default="hf")
     parser.add_argument("--model-dir", required=True, help="Path to HF best_model directory.")
     parser.add_argument("--onnx-path", default="", help="Required when backend=onnx.")
-    parser.add_argument("--device", default="auto", choices=["auto", "cpu", "cuda"])
+    parser.add_argument("--device", default="auto", choices=["auto", "cpu", "cuda", "mps"])
     parser.add_argument(
         "--provider",
         default=default_provider_argument(),

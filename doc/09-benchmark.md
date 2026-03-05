@@ -10,6 +10,7 @@
 bgmner-benchmark `
   --backend hf `
   --model-dir runs\bgm_ner_20ep_xlmr\best_model `
+  --device mps `
   --input-file data\ner_data\dev.txt `
   --batch-size 32 `
   --max-length 256 `
@@ -17,6 +18,8 @@ bgmner-benchmark `
   --benchmark-runs 20 `
   --output-json runs\bench_hf.json
 ```
+
+`--device` 支持：`auto|cpu|cuda|mps`（`auto` 优先级：`cuda -> mps -> cpu`）。
 
 ### 1.2 ONNX
 
@@ -86,4 +89,3 @@ $env:BGMNER_PROFILE_STAGES="1"
 ```
 
 会输出 `encode/tensor/infer/argmax/decode` 各阶段耗时。
-

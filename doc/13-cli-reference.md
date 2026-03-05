@@ -50,7 +50,7 @@
 - `--output-file`：输出 JSONL
 - `--batch-size`：默认 `32`
 - `--max-length`：默认 `256`
-- `--device`：`auto|cpu|cuda`，默认 `auto`
+- `--device`：`auto|cpu|cuda|mps`，默认 `auto`（优先级 `cuda -> mps -> cpu`）
 
 ## 4. `bgmner-onnx-predict`
 
@@ -131,7 +131,7 @@ provider 支持：
 - `--model-dir`：必填
 - `--onnx-path`：当 `backend=onnx` 必填
 - `--provider`：默认 `auto`
-- `--device`：`auto|cpu|cuda`，默认 `auto`
+- `--device`：`auto|cpu|cuda|mps`，默认 `auto`（优先级 `cuda -> mps -> cpu`）
 - `--text`
 - `--input-file`
 - `--max-samples`：默认 `0`
@@ -150,7 +150,7 @@ provider 支持：
 - `--backend`：`hf|onnx`，默认 `hf`
 - `--model-dir`：必填
 - `--onnx-path`：当 `backend=onnx` 必填
-- `--device`：`auto|cpu|cuda`，默认 `auto`
+- `--device`：`auto|cpu|cuda|mps`，默认 `auto`（优先级 `cuda -> mps -> cpu`）
 - `--provider`：默认 `auto`
 - `--batch-size`：默认 `32`
 - `--max-length`：默认 `256`
@@ -225,4 +225,3 @@ provider 支持：
 - `--provider`：默认 `auto`
 - `--dml-device-id`：默认 `0`
 - `--log-level`：默认 `info`
-

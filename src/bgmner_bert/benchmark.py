@@ -314,7 +314,7 @@ def build_parser() -> argparse.ArgumentParser:
             "use 'auto' for platform defaults."
         ),
     )
-    parser.add_argument("--device", default="auto", choices=["auto", "cpu", "cuda"])
+    parser.add_argument("--device", default="auto", choices=["auto", "cpu", "cuda", "mps"])
     parser.add_argument("--text", default="", help="Single input text.")
     parser.add_argument("--input-file", default="", help="Input file, one text/jsonl line per sample.")
     parser.add_argument("--max-samples", type=int, default=0)

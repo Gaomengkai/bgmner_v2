@@ -195,6 +195,7 @@ bgmner-train --config-file .\train_config.json
 ```powershell
 bgmner-predict `
   --model-dir runs\bgm_bert_base\best_model `
+  --device mps `
   --text "[桜都字幕组] 摇曳露营△ 第三季 [03][1080p][简繁内封]"
 ```
 
@@ -232,6 +233,7 @@ bgmner-onnx-predict `
 bgmner-benchmark `
   --backend hf `
   --model-dir runs\bgm_bert_base\best_model `
+  --device mps `
   --input-file data\ner_data\dev.txt `
   --batch-size 32 `
   --max-length 256 `
@@ -239,6 +241,8 @@ bgmner-benchmark `
   --benchmark-runs 20 `
   --max-samples 300
 ```
+
+HF 设备支持：`--device auto|cpu|cuda|mps`（`auto` 优先级：`cuda -> mps -> cpu`）。
 
 ### 6.2 ONNX 基准
 
