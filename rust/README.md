@@ -89,10 +89,10 @@ export ORT_DYLIB_PATH="$PWD/third_party/ort_1.24.2/lib/libonnxruntime.dylib"
 ```bash
 cd rust
 ./target/release/bgmner-rs batch \
-  --model-dir ../runs/bgm_ner_20ep_mmBERT_small/best_model \
-  --onnx-path ../runs/bgm_ner_20ep_mmBERT_small/onnx/model.int8.dynamic.onnx \
+  --model-dir ../runs/bgm_ner_20ep_xlmr/best_model \
+  --onnx-path ../runs/bgm_ner_20ep_xlmr/onnx/model.int8.dynamic.with_gather.onnx \
   --provider coreml,cpu \
-  --text "测试标题"
+  --text "【喵萌奶茶屋】★04月新番★[欺詐游戲 / 詐欺游戲 / LIAR GAME][10][1080p][繁日雙語][2026夏季招新見詳情]"
 ```
 
 ## 3. 启动 Web API

@@ -208,6 +208,14 @@ bgmner-predict `
   --output-file runs\bgm_bert_base\predictions\test1000_predictions.jsonl
 ```
 
+for linux:
+```bash
+bgmner-predict \
+  --model-dir runs\bgm_bert_base\best_model \
+  --input-file ./tests/1000.txt \
+  --output-file runs\bgm_bert_base\predictions\test1000_predictions.jsonl
+```
+
 ### 5.2 ONNX 推理
 
 ```powershell

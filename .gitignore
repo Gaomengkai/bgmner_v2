@@ -47,3 +47,6 @@ runs/
 
 # Rust artifacts
 rust/target/
+
+# third party
+third_party
