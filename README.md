@@ -41,7 +41,28 @@ powershell -ExecutionPolicy Bypass -File .\scripts\install_torch_rocm_win_amd.ps
 python -m pip install -e .
 ```
 
-### 1.3 Windows 运行时获取（DirectML + ONNX Runtime）
+
+### 1.3 Any OS + Nvidia GPU / Any CPU
+
+本工程只要求 `torch` 版本范围，不锁定 CPU 或 CUDA wheel。你可以按机器环境选择安装源：
+
+- CPU 版：先安装来自 PyTorch CPU 源的 `torch`
+- CUDA 版：先安装来自对应 CUDA 源的 `torch`
+
+示例：
+
+```powershell
+# CPU
+pip3 install torch torchvision --index-url https://mirrors.nju.edu.cn/pytorch/whl/cpu
+
+# CUDA 13.0
+pip3 install torch torchvision --index-url https://mirrors.nju.edu.cn/pytorch/whl/cu130
+
+# 然后安装本工程
+python -m pip install -e .
+```
+
+### 1.4 Windows 运行时获取（DirectML + ONNX Runtime）
 
 请优先使用 NuGet 官方包，不要依赖 `Office` 或 `System32` 里的 `DirectML.dll`。
 
